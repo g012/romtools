@@ -85,6 +85,8 @@ local remove = function()
         local selectworking = function(e)
             if not fav then fav = e return true end
             if hastag(fav, 'b%d+') and not hastag(e, 'b%d+') then fav = e return true end
+            if hastag(fav, 'h%d+') and not hastag(e, 'h%d+') then fav = e return true end
+            if hastag(fav, 'p%d+') and not hastag(e, 'p%d+') then fav = e return true end
             if hastag(fav, 't%d+') and not hastag(e, 't%d+') then fav = e return true end
             if hastag(fav, 'a%d+') and not hastag(e, 'a%d+') then fav = e return true end
             local trans = hastag(e, 'T%+(.*)')
@@ -181,7 +183,4 @@ local answer = io.read()
 if answer == 'y' or answer == 'Y' then
     sort(100)
 end
-
-local reject = { '%[b%d%]', '%[p%d%]', '%[t%d%]', '%[h%d%]', '%[T-%]', '%[a[^%]]%]', '(S)', '(G)', '(I)', '(K)' }
-local oneof = { 'E', 'U', 'J' }
 
