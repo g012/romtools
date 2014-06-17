@@ -9,45 +9,48 @@ local I=Cp()
 
 local list = {}
 
+local printrom = function(e)
+    local s = e.name
+    if e.ext then s = s .. ' [Ext: ' .. e.ext .. ']' end
+    if e.region then s = s .. ' [Region: ' .. e.region .. ']' end
+    if e.languages then s = s .. ' [Languages: ' .. e.languages .. ']' end
+    if e.tags and #e.tags > 0 then
+        s = s .. ' [Tags: '
+        for k,v in ipairs(e.tags) do
+            s = s .. v .. ','
+        end
+        s = s:sub(1,-2) .. ']'
+    end
+    if e.other then s = s .. ' [Other: ' .. e.other .. ']' end
+    print(s)
+end
+
 local addrom
 do
     local any = P(1)
     local space = S' \t'
-    local special = S'([.'
-    local ROM, Filename, Name, Region, Languages, Tag, Other, Ext = V"ROM", V"Filename", V"Name", V"Region", V"Languages", V"Tag", V"Other", V"Ext"
+    local special = S'(['
+    local ROM, Filename, Name, Region, Languages, Ignore, Tag, Other = V"ROM", V"Filename", V"Name", V"Region", V"Languages", V"Ignore", V"Tag", V"Other"
     local grammar = { ROM,
         ROM = Ct(Filename);
-        Filename = space^0 * Name * space^0 * Region^-1 * space^0 * Languages^-1 * space^0 * Cg(Ct(Tag^0), "tags") * space^0 * Other^0 * S'.' * Ext;
+        Filename = space^0 * Name * space^0 * Region^-1 * space^0 * Languages^-1 * space^0 * Ignore^-1 * space^0 * Cg(Ct(Tag^0), "tags") * space^0 * Other^0 * any^0;
         Name = Cg((1 - P(special))^1, "name");
         Region = S'(' * Cg((any - S')')^1, "region") * S')';
         Languages = S'(' * Cg((any - S')')^1, "languages") * S')';
         Tag = space^0 * S'[' * C((any - S']')^1) * S']' * space^0;
+        Ignore = space^0 * S'(' * (any - S')')^1 * S')' * space^0;
         Other = Cg(any - S'.', "other");
-        Ext = Cg(any^1, "ext");
     }
     local trim = function(s)
         return s:match"^%s*(.-)%s*$"
     end
-    local printrom = function(e)
-        local s = e.name
-        if e.ext then s = s .. ' [Ext: ' .. e.ext .. ']' end
-        if e.region then s = s .. ' [Region: ' .. e.region .. ']' end
-        if e.languages then s = s .. ' [Languages: ' .. e.languages .. ']' end
-        if e.tags and #e.tags > 0 then
-            s = s .. ' [Tags: '
-            for k,v in ipairs(e.tags) do
-                s = s .. v .. ','
-            end
-            s = s:sub(1,-2) .. ']'
-        end
-        if e.other then s = s .. ' [Other: ' .. e.other .. ']' end
-        print(s)
-    end
     addrom = function(f, path)
+        local x, ext = f:match'.*%.(.*)'
         local e = m.match(grammar, f)
         if not e then e = { name = f } end
         e.name = trim(e.name)
         e.path = path
+        e.ext = ext
         local l = list[e.name] or {}
         table.insert(l, e)
         list[e.name] = l
@@ -69,33 +72,47 @@ end
 local remove = function()
     local totalcount = 0
     local deletecount = 0
-    local favregion = { 'E', 'U', 'UE', 'W', 'PD', 'J' }
+    local favregion = { 'F', 'E', 'U', 'UE', 'W', 'PD', 'J' }
+    local indexof = function(t, e) for i=1,#t do if t[i] == e then return i end end end
     local hastag = function(e, tag) return _.detect(e.tags, function(x) return x:match(tag) end) end
     for name,et in pairs(list) do
         local fav
         local isExclamation
         local selectregion = function(e)
             local old
-            if fav.region then old = _.detect(favregion, function(x) return x == fav.region end) end
-            local new = _.detect(favregion, function(x) return x == e.region end)
+            if fav.region then old = indexof(favregion, fav.region) end
+            local new = indexof(favregion, e.region)
             if new and not old then fav = e return true
             elseif new and old and new < old then fav = e return true
             end
         end
         local selectworking = function(e)
+           -- if e.name:sub(1,4) == 'Jaja' then printrom(e) end
             if not fav then fav = e return true end
             if hastag(fav, 'b%d+') and not hastag(e, 'b%d+') then fav = e return true end
             if hastag(fav, 'h%d+') and not hastag(e, 'h%d+') then fav = e return true end
             if hastag(fav, 'p%d+') and not hastag(e, 'p%d+') then fav = e return true end
             if hastag(fav, 't%d+') and not hastag(e, 't%d+') then fav = e return true end
             if hastag(fav, 'a%d+') and not hastag(e, 'a%d+') then fav = e return true end
+            if hastag(fav, 'o%d+') and not hastag(e, 'o%d+') then fav = e return true end
+            if hastag(fav, 'f_%d+') and not hastag(e, 'f_%d+') then fav = e return true end
             local trans = hastag(e, 'T%+(.*)')
             if trans then
                 trans = string.upper(trans)
                 if trans:sub(1,1) == 'F' then fav = e return true end
                 if trans:sub(1,1) == 'E' then fav = e return true end
+            else
+                trans = hastag(fav, 'T%+(.*)')
+                if trans then
+                    trans = trans:sub(1,1)
+                    if trans ~= 'F' and trans ~= 'E' then fav = e return true end
+                end
             end
+            if fav.tags and (not e.tags or #fav.tags > #e.tags) then fav = e return true end
         end
+        --if et[1].name:sub(1,4) == 'Jaja' then
+        --    print(et[1].path, ''..#et)
+        --end
         for i,e in pairs(et) do
             if e.tags and hastag(e, '!') then
                 if not fav or not isExclamation then
@@ -109,6 +126,7 @@ local remove = function()
             end
         end
         if not fav then fav = et[1] end
+        --if et[1].name:sub(1,4) == 'Jaja' then print('=>', fav.path) end
         totalcount = totalcount + #et
         deletecount = deletecount + #et - 1
         list[name] = { fav }
@@ -130,7 +148,6 @@ local sort = function(mincount)
         if last ~= first then
             dir = first .. '-' .. last
         end
-        dir = dir
         while letter do
             local files = counts[letter]
             if files then for k,v in ipairs(files) do
@@ -164,9 +181,10 @@ local sort = function(mincount)
             count = count + #counts[letter]
             if count >= mincount then 
                 move(last, letter)
-                last = letter
+                last = nextletter(letter)
                 count = 0
             end
+        elseif last == letter then last = nextletter(last)
         end
         letter = nextletter(letter)
     end
